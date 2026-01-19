@@ -46,7 +46,7 @@ COPY movenet_model/ ./movenet_model/
 RUN mkdir -p uploads
 
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE 10000
 
 # Run the application
 CMD ["python", "main.py"]
