@@ -4,22 +4,46 @@ import math
 import tensorflow as tf
 
 # -----------------------
-# Load MoveNet model once
+# Lazy load MoveNet model
 # -----------------------
-model = tf.saved_model.load("movenet_model")
-movenet = model.signatures["serving_default"]
+_model = None
+_movenet = None
+
+
+def get_movenet():
+    global _model, _movenet
+    if _movenet is None:
+        _model = tf.saved_model.load("movenet_model")
+        _movenet = _model.signatures["serving_default"]
+    return _movenet
+
 
 KEYPOINT_NAMES = [
-    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
-    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-    "left_wrist", "right_wrist", "left_hip", "right_hip",
-    "left_knee", "right_knee", "left_ankle", "right_ankle"
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
 ]
+
 
 # -----------------------
 # Detect pose from a frame
 # -----------------------
 def detect_pose(frame):
+    movenet = get_movenet()  # Load model on first call
     h, w, _ = frame.shape
     img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     img_resized = cv2.resize(img, (192, 192))
@@ -34,44 +58,71 @@ def detect_pose(frame):
         keypoints[name] = {
             "x": float(keypoints_array[idx][1]),
             "y": float(keypoints_array[idx][0]),
-            "score": float(keypoints_array[idx][2])
+            "score": float(keypoints_array[idx][2]),
         }
     return keypoints
+
 
 # -----------------------
 # Helper: calculate angle
 # -----------------------
 def angle(a, b, c):
-    ba = (a['x'] - b['x'], a['y'] - b['y'])
-    bc = (c['x'] - b['x'], c['y'] - b['y'])
+    ba = (a["x"] - b["x"], a["y"] - b["y"])
+    bc = (c["x"] - b["x"], c["y"] - b["y"])
     dot = ba[0] * bc[0] + ba[1] * bc[1]
-    mag1 = math.sqrt(ba[0]**2 + ba[1]**2)
-    mag2 = math.sqrt(bc[0]**2 + bc[1]**2)
+    mag1 = math.sqrt(ba[0] ** 2 + ba[1] ** 2)
+    mag2 = math.sqrt(bc[0] ** 2 + bc[1] ** 2)
     if mag1 * mag2 == 0:
         return 180.0
     return math.degrees(math.acos(dot / (mag1 * mag2)))
+
 
 # -----------------------
 # Shot Rules
 # -----------------------
 SHOT_RULES = {
     "serve": [
-        {"condition": lambda k: k["right_wrist"]["y"] < k["right_hip"]["y"],
-         "message": "Racket hand must be below waist during serve"},
-        {"condition": lambda k: angle(k["right_shoulder"], k["right_elbow"], k["right_wrist"]) < 150,
-         "message": "Serving arm should be straighter"},
-        {"condition": lambda k: abs(k["left_shoulder"]["y"] - k["right_shoulder"]["y"]) > 0.08,
-         "message": "Shoulders should be level during serve"}
+        {
+            "condition": lambda k: k["right_wrist"]["y"] < k["right_hip"]["y"],
+            "message": "Racket hand must be below waist during serve",
+        },
+        {
+            "condition": lambda k: angle(
+                k["right_shoulder"], k["right_elbow"], k["right_wrist"]
+            )
+            < 150,
+            "message": "Serving arm should be straighter",
+        },
+        {
+            "condition": lambda k: abs(
+                k["left_shoulder"]["y"] - k["right_shoulder"]["y"]
+            )
+            > 0.08,
+            "message": "Shoulders should be level during serve",
+        },
     ],
     "smash": [
-        {"condition": lambda k: k["right_elbow"]["y"] > k["right_shoulder"]["y"],
-         "message": "Raise elbow higher before smashing"},
-        {"condition": lambda k: angle(k["right_hip"], k["right_knee"], k["right_ankle"]) > 165,
-         "message": "Bend knees more to generate smash power"},
-        {"condition": lambda k: abs(k["left_shoulder"]["y"] - k["right_shoulder"]["y"]) < 0.04,
-         "message": "Rotate shoulders more for a powerful smash"}
-    ]
+        {
+            "condition": lambda k: k["right_elbow"]["y"] > k["right_shoulder"]["y"],
+            "message": "Raise elbow higher before smashing",
+        },
+        {
+            "condition": lambda k: angle(
+                k["right_hip"], k["right_knee"], k["right_ankle"]
+            )
+            > 165,
+            "message": "Bend knees more to generate smash power",
+        },
+        {
+            "condition": lambda k: abs(
+                k["left_shoulder"]["y"] - k["right_shoulder"]["y"]
+            )
+            < 0.04,
+            "message": "Rotate shoulders more for a powerful smash",
+        },
+    ],
 }
+
 
 # -----------------------
 # Analyze video
@@ -91,14 +142,24 @@ def analyze_video(video_path: str, shot_type: str):
         h, w, _ = frame.shape
         keypoints = detect_pose(frame)
 
-        body_kps = {k: keypoints[k] for k in [
-            "left_shoulder", "right_shoulder",
-            "left_elbow", "right_elbow",
-            "left_wrist", "right_wrist",
-            "left_hip", "right_hip",
-            "left_knee", "right_knee",
-            "left_ankle", "right_ankle"
-        ] if k in keypoints}
+        body_kps = {
+            k: keypoints[k]
+            for k in [
+                "left_shoulder",
+                "right_shoulder",
+                "left_elbow",
+                "right_elbow",
+                "left_wrist",
+                "right_wrist",
+                "left_hip",
+                "right_hip",
+                "left_knee",
+                "right_knee",
+                "left_ankle",
+                "right_ankle",
+            ]
+            if k in keypoints
+        }
 
         for k, v in body_kps.items():
             body_kps[k] = {"x": v["x"], "y": v["y"]}
@@ -111,11 +172,9 @@ def analyze_video(video_path: str, shot_type: str):
             except Exception:
                 continue
 
-        results.append({
-            "frame_index": frame_index,
-            "keypoints": body_kps,
-            "feedback": feedback
-        })
+        results.append(
+            {"frame_index": frame_index, "keypoints": body_kps, "feedback": feedback}
+        )
         frame_index += 1
 
     cap.release()

@@ -2,8 +2,16 @@
 import cv2
 from ultralytics import YOLO
 
-# Load your YOLOv8 model
-model = YOLO("models/train1_last.pt")  # path to your exported model
+# Lazy load model (defer loading until first use)
+_model = None
+
+
+def get_model():
+    global _model
+    if _model is None:
+        _model = YOLO("models/train1_last.pt")
+    return _model
+
 
 def extract_frames(video_path: str):
     """
@@ -21,7 +29,9 @@ def extract_frames(video_path: str):
     cap.release()
     return frames
 
+
 def classify_video(video_path: str):
+    model = get_model()  # Load model on first call
     frames = extract_frames(video_path)
     predictions = []
 
@@ -38,4 +48,3 @@ def classify_video(video_path: str):
         return "unknown"
 
     return max(set(predictions), key=predictions.count)
-
