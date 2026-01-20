@@ -7,9 +7,6 @@ import uuid
 import os
 import uvicorn
 
-from classifier import classify_video
-from pose_service import analyze_video
-
 app = FastAPI(title="Badminton Gesture Analysis")
 
 os.makedirs("uploads", exist_ok=True)
@@ -21,6 +18,9 @@ MAX_FILE_SIZE = 30 * 1024 * 1024  # 30MB
 # -----------------------
 @app.post("/classify_shot")
 async def classify_shot(file: UploadFile = File(...)):
+    # Lazy import to avoid slow startup
+    from classifier import classify_video
+
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large (max 30MB)")
@@ -40,6 +40,9 @@ async def classify_shot(file: UploadFile = File(...)):
 # -----------------------
 @app.post("/compare_pose")
 async def compare_pose(file: UploadFile = File(...), shot_type: str = Form(...)):
+    # Lazy import to avoid slow startup
+    from pose_service import analyze_video
+
     filename = f"uploads/{uuid.uuid4()}.mp4"
     with open(filename, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -48,6 +51,11 @@ async def compare_pose(file: UploadFile = File(...), shot_type: str = Form(...))
     os.remove(filename)
 
     return JSONResponse(result)
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 
 if __name__ == "__main__":
